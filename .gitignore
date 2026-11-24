@@ -1,0 +1,48 @@
+﻿# Secrets and environment variables
+.env*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Databases and SQLite backups
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+
+# Frontend dependencies and builds
+node_modules/
+dist/
+build/
+.vite/
+coverage/
+
+# Project backups and reference repositories
+backups/
+references/
+
+# Logs and operating-system files
+*.log
+.DS_Store
+Thumbs.db
+
+# Local configuration backups
+.gitignore.backup_*
+
+# Historical source backups
+*.backup
+*.backup-*
+*.before-*
+*.routing-final-backup
+
+# Timestamped source backups
+*.backup_*
+
+# Local one-off development scripts
+/update_queue_model.py
