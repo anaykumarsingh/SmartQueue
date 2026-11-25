@@ -1,15 +1,11 @@
 ﻿import hashlib
 import secrets
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from app.core.time_utils import ist_end_of_day_naive, ist_now_naive
 from app.models.queue import Counter, QueueToken, Service
-
-
-IST = ZoneInfo("Asia/Kolkata")
 
 
 def generate_token(db: Session, service_id: int):
@@ -25,13 +21,8 @@ def generate_token(db: Session, service_id: int):
     if service is None:
         raise ValueError("Selected service is unavailable.")
 
-    now_aware = datetime.now(IST)
-    now = now_aware.replace(tzinfo=None)
-
-    expires_at = (
-        now_aware.replace(hour=0, minute=0, second=0, microsecond=0)
-        + timedelta(days=1)
-    ).replace(tzinfo=None)
+    now = ist_now_naive()
+    expires_at = ist_end_of_day_naive(now)
 
     # Find the next sequential number for this service.
     prefix = f"{service.code}_"
@@ -116,7 +107,7 @@ def verify_qr_token(db: Session, qr_code: str):
     if token is None:
         raise ValueError("Invalid QR code. Ticket not found.")
 
-    now = datetime.now(IST).replace(tzinfo=None)
+    now = ist_now_naive()
 
     if token.status == "expired":
         raise ValueError("This ticket has expired.")
@@ -149,7 +140,7 @@ def verify_qr_token(db: Session, qr_code: str):
 
 def claim_qr_token(db: Session, qr_code: str):
     qr_hash = hashlib.sha256(qr_code.encode("utf-8")).hexdigest()
-    now = datetime.now(IST).replace(tzinfo=None)
+    now = ist_now_naive()
 
     # Atomically claim only a valid, unexpired, unclaimed ticket.
     result = db.execute(
@@ -224,7 +215,7 @@ def _get_manual_ticket(db: Session, token_number: str, verification_code: str, c
     if token.status != "unclaimed":
         raise ValueError("This ticket has already been claimed or used.")
 
-    now = datetime.now(IST).replace(tzinfo=None)
+    now = ist_now_naive()
 
     if token.expires_at is None or now >= token.expires_at:
         token.status = "expired"
@@ -285,7 +276,7 @@ def claim_manual_ticket(
         db, token_number, verification_code, counter_id
     )
 
-    now = datetime.now(IST).replace(tzinfo=None)
+    now = ist_now_naive()
 
     result = db.execute(
         update(QueueToken)

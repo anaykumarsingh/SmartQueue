@@ -1,7 +1,6 @@
-from datetime import datetime
-
 from sqlalchemy.orm import Session
 
+from app.core.time_utils import ist_now_naive
 from app.models.queue import (
     QueueToken,
     Service,
@@ -97,7 +96,7 @@ def get_token_status(db: Session, token_number: str):
         .all()
     )
 
-    now = datetime.now()
+    now = ist_now_naive()
 
     for serving_token in serving_tokens:
         counter_id = serving_token.counter_id

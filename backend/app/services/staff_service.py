@@ -1,7 +1,6 @@
-from datetime import datetime
-
 from sqlalchemy.orm import Session
 
+from app.core.time_utils import ist_now_naive
 from app.models.queue import Counter, QueueToken
 
 
@@ -45,7 +44,7 @@ def call_next_token(db: Session, counter_id: int):
 
     token.status = "serving"
     token.counter_id = counter_id
-    token.called_at = datetime.now()
+    token.called_at = ist_now_naive()
 
     db.commit()
     db.refresh(token)
@@ -77,7 +76,7 @@ def complete_current_token(db: Session, counter_id: int):
     if token is None:
         raise ValueError("No token is currently being served at this counter.")
 
-    now = datetime.now()
+    now = ist_now_naive()
     started_at = token.called_at or now
 
     waiting_minutes = max(

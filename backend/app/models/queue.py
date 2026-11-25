@@ -8,11 +8,12 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
-    func,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.core.time_utils import ist_now_naive
 
 
 class Service(Base):
@@ -25,7 +26,7 @@ class Service(Base):
     avg_service_minutes: Mapped[float] = mapped_column(Float, default=5.0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now()
+        DateTime, default=ist_now_naive
     )
 
     counters: Mapped[list["Counter"]] = relationship(
@@ -60,6 +61,11 @@ class Counter(Base):
 
     __table_args__ = (
         CheckConstraint("counter_number > 0"),
+        UniqueConstraint(
+            "service_id",
+            "counter_number",
+            name="uq_counters_service_counter_number",
+        ),
     )
 
 
@@ -81,7 +87,7 @@ class QueueToken(Base):
     )
     estimated_wait_minutes: Mapped[float | None] = mapped_column(Float)
     issued_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now()
+        DateTime, default=ist_now_naive
     )
     called_at: Mapped[datetime | None] = mapped_column(DateTime)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime)
