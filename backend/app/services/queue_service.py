@@ -1,4 +1,5 @@
-from sqlalchemy.orm import Session
+﻿from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_
 
 from app.core.time_utils import ist_now_naive
 from app.models.queue import (
@@ -28,7 +29,7 @@ def get_token_status(db: Session, token_number: str):
     if service is None:
         raise ValueError("Service not found.")
 
-    if token.status != "waiting":
+    if token.status not in ("unclaimed", "waiting"):
         return {
             "token_number": token.token_number,
             "status": token.status,
@@ -36,19 +37,35 @@ def get_token_status(db: Session, token_number: str):
             "estimated_wait_minutes": 0.0,
         }
 
-    people_ahead_tokens = (
+    now = ist_now_naive()
+
+    # Include earlier waiting tokens and non-expired unclaimed tokens.
+    active_queue_tokens = (
         db.query(QueueToken)
         .filter(
             QueueToken.service_id == token.service_id,
-            QueueToken.status == "waiting",
-            QueueToken.id < token.id,
+            QueueToken.id <= token.id,
+            or_(
+                QueueToken.status == "waiting",
+                and_(
+                    QueueToken.status == "unclaimed",
+                    or_(
+                        QueueToken.expires_at.is_(None),
+                        QueueToken.expires_at > now,
+                    ),
+                ),
+            ),
         )
         .order_by(QueueToken.id)
         .all()
     )
 
-    people_ahead = len(people_ahead_tokens)
+    people_ahead = sum(
+        1 for queued_token in active_queue_tokens
+        if queued_token.id < token.id
+    )
 
+    # Calculate average service duration from recent completed records.
     recent_records = (
         db.query(ServiceRecord.service_time_minutes)
         .join(
@@ -73,6 +90,7 @@ def get_token_status(db: Session, token_number: str):
         else service.avg_service_minutes
     )
 
+    # Start with the workload of currently open counters.
     counters = (
         db.query(Counter)
         .filter(
@@ -82,11 +100,13 @@ def get_token_status(db: Session, token_number: str):
         .all()
     )
 
-    if not counters:
-        counter_loads = {None: 0.0}
-    else:
+    if counters:
         counter_loads = {counter.id: 0.0 for counter in counters}
+    else:
+        # Fallback estimate when no counter is currently open.
+        counter_loads = {None: 0.0}
 
+    # Account for tokens currently being served.
     serving_tokens = (
         db.query(QueueToken)
         .filter(
@@ -95,8 +115,6 @@ def get_token_status(db: Session, token_number: str):
         )
         .all()
     )
-
-    now = ist_now_naive()
 
     for serving_token in serving_tokens:
         counter_id = serving_token.counter_id
@@ -120,17 +138,18 @@ def get_token_status(db: Session, token_number: str):
 
         counter_loads[counter_id] += remaining
 
-    queue = people_ahead_tokens + [token]
-
+    # Assign each earlier token and the current token
+    # to whichever counter is expected to become free first.
     estimated_wait = 0.0
 
-    for queued_token in queue:
+    for queued_token in active_queue_tokens:
         selected_counter = min(
             counter_loads,
             key=counter_loads.get,
         )
 
-        estimated_wait = counter_loads[selected_counter]
+        if queued_token.id == token.id:
+            estimated_wait = counter_loads[selected_counter]
 
         counter_loads[selected_counter] += average_service_time
 

@@ -195,6 +195,62 @@ export default function App() {
   const ahead = token ? getAhead(token) : null;
   const status = token ? getStatus(token) : null;
   const isUnclaimed = status === "unclaimed";
+  const tokenNumberForPolling = token ? getTokenNumber(token) : null;
+
+  useEffect(() => {
+    if (
+      !tokenNumberForPolling ||
+      status === "completed" ||
+      status === "cancelled"
+    ) {
+      return;
+    }
+
+    let active = true;
+    let inFlight = false;
+
+    async function updateQueueStatus() {
+      if (inFlight) return;
+
+      inFlight = true;
+
+      try {
+        const latest = await request(
+          ENDPOINTS.tokenStatus(tokenNumberForPolling)
+        );
+
+        if (!active) return;
+
+        setToken((previous) => {
+          if (
+            !previous ||
+            getTokenNumber(previous) !== tokenNumberForPolling
+          ) {
+            return previous;
+          }
+
+          return { ...previous, ...latest };
+        });
+
+        setOnline(true);
+      } catch {
+        if (active) {
+          setOnline(false);
+        }
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    updateQueueStatus();
+
+    const intervalId = setInterval(updateQueueStatus, 5000);
+
+    return () => {
+      active = false;
+      clearInterval(intervalId);
+    };
+  }, [tokenNumberForPolling, status]);
 
   return (
     <div className="app" id="top">
@@ -314,11 +370,11 @@ export default function App() {
                   </div>
                   <div>
                     <dt>People ahead</dt>
-                    <dd>{isUnclaimed ? "—" : (ahead ?? "—")}</dd>
+                    <dd>{ahead ?? "—"}</dd>
                   </div>
                   <div>
                     <dt>Estimated waiting time</dt>
-                    <dd>{isUnclaimed ? "—" : formatWait(getWait(token))}</dd>
+                    <dd>{formatWait(getWait(token))}</dd>
                   </div>
                 </dl>
 
